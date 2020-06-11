@@ -12,6 +12,15 @@ def images(x, y, adv, y_hat):
     plt.show()
 
 
+def save(adv, y_hat, file):
+    file += ".png"
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(4, 3))
+    ax.imshow(adv, cmap="gray")
+    ax.set_title(torch.argmax(y_hat).item())
+    fig.tight_layout()
+    plt.savefig("images/" + file)
+
+
 def history(hist):
     plt.plot(range(len(hist)), hist)
     plt.tight_layout()

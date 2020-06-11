@@ -15,7 +15,7 @@ class Attack(ABC):
 
 class ES(Attack):
 
-    def __init__(self, n_iter=1000, n_population=5, epsilon=0.25, step_size=0.05, sigma=0.25, seed=0):
+    def __init__(self, n_iter=1000, n_population=5, epsilon=0.3, step_size=0.05, sigma=0.25, seed=0):
         self.n_iter = n_iter
         self.n_population = n_population
         self.epsilon = epsilon
@@ -24,8 +24,6 @@ class ES(Attack):
         self.seed = seed
 
     def attack(self, model, x, y, target=False):
-        torch.manual_seed(self.seed)
-
         self.model_ = model
         self.min_ = 0.0
         self.max_ = 1.0
@@ -58,20 +56,17 @@ class ES(Attack):
                 adv = x + perturbation
                 adv = torch.clamp(adv, self.min_, self.max_)
                 y_hat = torch.detach(self.model_(adv))
-
                 n_queries += 1
-                if not target:
-                    if torch.argmax(y_hat).item() != y.item():
-                        adv = torch.detach(adv)
-                        adv = torch.squeeze(adv)
-                        success = True
-                        break
+
+                if target:
+                    success = torch.argmax(y_hat).item() == y.item()
                 else:
-                    if torch.argmax(y_hat).item() == y.item():
-                        adv = torch.detach(adv)
-                        adv = torch.squeeze(adv)
-                        success = True
-                        break
+                    success = torch.argmax(y_hat).item() != y.item()
+
+                if success:
+                    adv = torch.detach(adv)
+                    adv = torch.squeeze(adv)
+                    break
 
                 loss = F.cross_entropy(y_hat, y) ** 2
                 if target:
@@ -100,15 +95,13 @@ class ES(Attack):
 
 class IFGSM(Attack):
 
-    def __init__(self, n_iter=1000, epsilon=0.25, step_size=0.001, seed=0):
+    def __init__(self, n_iter=1000, epsilon=0.3, step_size=0.001, seed=0):
         self.n_iter = n_iter
         self.epsilon = epsilon
         self.step_size = step_size
         self.seed = seed
 
     def attack(self, model, x, y, target=False):
-        torch.manual_seed(self.seed)
-
         self.model_ = model
         self.min_ = 0.0
         self.max_ = 1.0
@@ -123,22 +116,18 @@ class IFGSM(Attack):
             adv = x + self.noise_
             adv = torch.clamp(adv, self.min_, self.max_)
             adv.requires_grad = True
-
             y_hat = self.model_(adv)
-
             n_queries += 1
-            if not target:
-                if torch.argmax(y_hat).item() != y.item():
-                    adv = torch.detach(adv)
-                    adv = torch.squeeze(adv)
-                    success = True
-                    break
+
+            if target:
+                success = torch.argmax(y_hat).item() == y.item()
             else:
-                if torch.argmax(y_hat).item() == y.item():
-                    adv = torch.detach(adv)
-                    adv = torch.squeeze(adv)
-                    success = True
-                    break
+                success = torch.argmax(y_hat).item() != y.item()
+
+            if success:
+                adv = torch.detach(adv)
+                adv = torch.squeeze(adv)
+                break
 
             model.zero_grad()
             loss = F.cross_entropy(y_hat, y)

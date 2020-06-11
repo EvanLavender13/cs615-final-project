@@ -7,6 +7,9 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
 
+from attacks import ES, IFGSM
+from transforms import Adversarial
+
 # Reference
 # https://github.com/pytorch/examples/tree/master/mnist
 
@@ -94,6 +97,9 @@ def main():
                         help='how many batches to wait before logging training status')
     parser.add_argument('--save-model', action='store_true', default=False,
                         help='For Saving the current Model')
+    parser.add_argument('--perturb', action='store_true', default=False,
+                        help='For perturbing training images')
+    parser.add_argument("--blackbox", action="store_true", default=False)
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -101,11 +107,26 @@ def main():
 
     device = torch.device("cuda" if use_cuda else "cpu")
 
+    pre_model = None
+
+    if args.perturb:
+        pre_model = Net().to(device)
+        pre_model.load_state_dict(torch.load(
+            "data/mnist_cnn_.pt", map_location="cpu"))
+
+    perturb_prob = 0.2 if args.perturb else 0.0
+    perturb_attack = ES(n_iter=10, step_size=0.2) if args.blackbox else IFGSM(
+        n_iter=10, step_size=0.01)
+
+    if args.perturb:
+        print("Perturbing training images...")
+
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     train_loader = torch.utils.data.DataLoader(
         datasets.MNIST('../data', train=True, download=True,
                        transform=transforms.Compose([
-                           transforms.ToTensor()
+                           transforms.ToTensor(),
+                           Adversarial(pre_model, perturb_attack, perturb_prob)
                        ])),
         batch_size=args.batch_size, shuffle=True, **kwargs)
     test_loader = torch.utils.data.DataLoader(
@@ -124,8 +145,22 @@ def main():
         scheduler.step()
 
     if args.save_model:
-        torch.save(model.state_dict(), "data/mnist_cnn.pt")
+        name = "data/mnist_cnn_"
+        if args.perturb:
+            name += "p"
+            if args.blackbox:
+                name += "bb"
+        name += ".pt"
+        torch.save(model.state_dict(), name)
 
 
 if __name__ == '__main__':
+    # mnist orig
+    # Test set: Average loss: 0.0590, Accuracy: 9805/10000 (98%)
+
+    # mnist ifgsm perturbed
+    # Test set: Average loss: 0.0554, Accuracy: 9810/10000 (98%)
+
+    # mnist es perturbed
+    # Test set: Average loss: 0.0558, Accuracy: 9826/10000 (98%)
     main()
